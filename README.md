@@ -1,74 +1,36 @@
 # paperclip-hermes-profile-adapter
 
-Draft repository for a profile-aware Paperclip adapter: `adapterType: hermes_profile`.
+Profile-aware Paperclip adapter for Bloom employee Hermes profiles: `adapterType: hermes_profile`.
 
-## Purpose
+## Why this exists
 
-Make Bloom employee Hermes profiles first-class Paperclip agents without using the generic `process` adapter. This should remove the Paperclip skill-sync warning while preserving profile isolation.
+Paperclip shows `This adapter does not implement skill sync yet.` for generic adapters such as `process` because they do not expose `listSkills` / `syncSkills`. `hermes_profile` is a real Paperclip server adapter with those methods, so employee agents can stay profile-isolated without using root/main `hermes_local`.
 
-## Non-goals
+## Integration point confirmed
 
-- Do not patch `~/.hermes/hermes-agent/` upstream source.
-- Do not patch installed Paperclip `dist/` files by hand.
-- Do not expose arbitrary shell command execution through adapter config.
-- Do not let employee profile agents run as root/main Hermes.
+Paperclip loads external adapters from `~/.paperclip/adapter-plugins.json` via:
 
-## Proposed file structure
+- `@paperclipai/server/dist/services/adapter-plugin-store.js`
+- `@paperclipai/server/dist/adapters/plugin-loader.js`
+- `@paperclipai/server/dist/adapters/registry.js`
 
-```text
-paperclip-hermes-profile-adapter/
-  package.json
-  tsconfig.json
-  README.md
-  src/
-    index.ts
-    server/
-      index.ts
-      adapter.ts
-      execute.ts
-      test.ts
-      skills.ts
-      config.ts
-      profile-env.ts
-      session-codec.ts
-      types.ts
-  tests/
-    adapter.test.js
-    config.test.js
-    skills.test.js
-    profile-env.test.js
+The external package must export `createServerAdapter()` from its package entrypoint. The loader calls it and registers the returned object. Local development can use the store record's `localPath`; no installed `dist/` patch is required.
+
+Example plugin store record:
+
+```json
+[
+  {
+    "type": "hermes_profile",
+    "packageName": "paperclip-hermes-profile-adapter",
+    "localPath": "/Users/bloom.gallery/src/paperclip-hermes-profile-adapter"
+  }
+]
 ```
 
-## Paperclip integration model
+After changing the store, restart Paperclip or use its adapter reload route/UI if available.
 
-Paperclip server discovers/loads an adapter module, then registers a server adapter object. The adapter must present the same server-adapter surface Paperclip already checks in `@paperclipai/server` routes:
-
-- `type: "hermes_profile"`
-- `execute(...)`
-- `testEnvironment(...)`
-- `listSkills(...)`
-- `syncSkills(...)`
-
-Paperclip's agent skill routes currently do roughly this:
-
-```text
-GET /agents/:id/skills
-  -> findActiveServerAdapter(agent.adapterType)
-  -> if adapter.listSkills missing: unsupported snapshot / warning
-  -> else adapter.listSkills(...)
-
-POST /agents/:id/skills/sync
-  -> findActiveServerAdapter(agent.adapterType)
-  -> if adapter.syncSkills exists: adapter.syncSkills(...)
-  -> else if adapter.listSkills exists: adapter.listSkills(...)
-  -> else unsupported snapshot / warning
-```
-
-So `hermes_profile` integrates by becoming a real active server adapter. Once Paperclip sees `listSkills`/`syncSkills`, the UI warning disappears.
-
-## Runtime model
-
-Example Paperclip agent config:
+## Agent adapter config
 
 ```json
 {
@@ -77,47 +39,48 @@ Example Paperclip agent config:
     "profile": "stella",
     "timeoutSec": 300,
     "persistSession": true,
-    "cwd": "/Users/bloom.gallery",
+    "cwd": "/Users/bloom.gallery/.hermes/profiles/stella/workspace",
     "allowedProfiles": ["stella", "cleo", "devin", "fiona", "aster"]
   }
 }
 ```
 
-Execution flow:
+## Runtime behavior
 
-```text
-Paperclip issue/run
-  -> adapterType hermes_profile
-  -> validate adapterConfig.profile against allowlist
-  -> resolve ~/.hermes/profiles/<profile>
-  -> inject profile env from /profiles/<profile> or use profile wrapper
-  -> run Hermes explicitly as that profile
-  -> return result to Paperclip
-```
-
-Preferred execution command initially:
-
-```bash
-~/.hermes/profiles/stella/bin/hermes-profile-wrapper.sh chat -q '<prompt>'
-```
-
-This reuses the wrapper that already handles profile-specific Infisical/LiteLLM/Honcho setup. Later, if safer, the adapter can call:
-
-```bash
-hermes --profile stella chat -q '<prompt>'
-```
+- Validates `profile` against a strict regex and allowlist.
+- Runs only `~/.hermes/profiles/<profile>/bin/hermes-profile-wrapper.sh`; adapter config cannot supply an arbitrary command.
+- Passes Paperclip run/agent/company env vars and optional local-agent JWT (`PAPERCLIP_API_KEY`).
+- Persists Hermes session id as `{ profile, sessionId }` when quiet output includes `session_id:`.
+- Lists profile-local skills from `~/.hermes/profiles/<profile>/skills/**/SKILL.md`.
+- `syncSkills` is intentionally read-only/no-op for now: it reflects desired skills in the returned snapshot but does not copy/link/delete files.
 
 ## Safety boundaries
 
-1. `profile` must match a strict name regex and allowlist.
-2. No arbitrary `command` field in Paperclip adapter config.
-3. Root/main remains `hermes_local`; employees use `hermes_profile`.
-4. Secrets come from `/profiles/<name>`, not root `/`, except shared infra endpoints.
-5. `listSkills` reads profile-local skill inventory.
-6. Initial `syncSkills` should be no-op/read-only or only update desired-skill preference; no automatic copying from root global skills.
-7. Logs redact tokens, keys, chat IDs, and secret paths in any public-facing output.
-8. Timeout cleanup must terminate child Hermes process trees.
+1. Root/main remains `hermes_local`; employee agents use `hermes_profile`.
+2. No arbitrary shell command execution through adapter config.
+3. Profile wrappers own profile-specific secret loading.
+4. Skill sync is read-only until we explicitly design profile skill mutation.
+5. Do not patch `~/.hermes/hermes-agent/` or installed Paperclip `dist/` files.
 
-## Open integration question
+## Development
 
-Need to verify Paperclip's supported external adapter registration mechanism. If Paperclip does not currently support loading external adapter packages by config, integration will need a small upstream/maintained Paperclip extension point rather than editing installed `dist/`.
+```bash
+npm install
+npm run build
+npm test
+```
+
+## Live registration checklist
+
+1. Build this repo: `npm run build`.
+2. Add/update `~/.paperclip/adapter-plugins.json` with the localPath record above.
+3. Restart Paperclip so `registry.js` reloads external adapters.
+4. Confirm `hermes_profile` appears in Paperclip adapter list.
+5. Update one low-risk employee agent from `process` to `hermes_profile` with an allowlisted profile.
+6. Run `testEnvironment` from the Paperclip UI/API.
+7. Open the agent skill panel; the unsupported-warning should be gone.
+8. Run one heartbeat/task and verify the profile wrapper, not root/main, executed.
+
+## Current risk
+
+This is implemented as a safe scaffold. `execute` is real but should be canaried on one employee profile first because the exact Hermes wrapper CLI contract can drift. `syncSkills` deliberately does not mutate profile skills yet.
