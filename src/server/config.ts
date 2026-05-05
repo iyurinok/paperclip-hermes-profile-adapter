@@ -18,6 +18,11 @@ function cfgNumber(value: unknown, fallback: number, min: number, max: number): 
   return Math.min(max, Math.max(min, Math.floor(value)));
 }
 
+function cfgNonNegativeNumber(value: unknown, fallback: number, max: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(0, Math.floor(value)));
+}
+
 function cfgStringArray(value: unknown): string[] | undefined {
   return Array.isArray(value) && value.every((item) => typeof item === "string") ? [...value] : undefined;
 }
@@ -51,7 +56,7 @@ export function parseHermesProfileConfig(raw: unknown): HermesProfileAdapterConf
   return {
     profile,
     allowedProfiles,
-    timeoutSec: cfgNumber(value.timeoutSec, 300, 10, 3600),
+    timeoutSec: cfgNonNegativeNumber(value.timeoutSec, 0, 86400),
     graceSec: cfgNumber(value.graceSec, 10, 1, 120),
     persistSession: typeof value.persistSession === "boolean" ? value.persistSession : true,
     cwd: cfgString(value.cwd),

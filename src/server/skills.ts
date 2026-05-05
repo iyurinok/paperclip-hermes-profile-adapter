@@ -82,8 +82,7 @@ export async function syncHermesProfileSkills(ctx: HermesProfileSkillContext, de
     ...snapshot,
     desiredSkills,
     warnings: [
-      ...snapshot.warnings,
-      "Requested desiredSkills were reflected in the snapshot only; no files were copied, linked, or deleted.",
+      "hermes_profile skill sync is read-only; no profile skill files were modified.",
     ],
   };
 }

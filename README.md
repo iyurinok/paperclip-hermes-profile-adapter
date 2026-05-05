@@ -37,7 +37,7 @@ After changing the store, restart Paperclip or use its adapter reload route/UI i
   "adapterType": "hermes_profile",
   "adapterConfig": {
     "profile": "stella",
-    "timeoutSec": 300,
+    "timeoutSec": 0,
     "persistSession": true,
     "cwd": "/Users/bloom.gallery/.hermes/profiles/stella/workspace",
     "allowedProfiles": ["stella", "cleo", "devin", "fiona", "aster"]
@@ -48,6 +48,7 @@ After changing the store, restart Paperclip or use its adapter reload route/UI i
 ## Runtime behavior
 
 - Validates `profile` against a strict regex and allowlist.
+- Uses `timeoutSec: 0` by default to disable the adapter-level kill timer; set a positive value to enforce a per-run process timeout.
 - Runs only `~/.hermes/profiles/<profile>/bin/hermes-profile-wrapper.sh`; adapter config cannot supply an arbitrary command.
 - Passes Paperclip run/agent/company env vars and optional local-agent JWT (`PAPERCLIP_API_KEY`).
 - Persists Hermes session id as `{ profile, sessionId }` when quiet output includes `session_id:`.

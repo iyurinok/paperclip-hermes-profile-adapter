@@ -11,7 +11,42 @@ function cfgString(value: unknown): string | undefined {
 }
 
 function renderTemplate(template: string, vars: Record<string, string>): string {
-  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key: string) => vars[key] ?? "");
+  let rendered = template;
+  rendered = rendered.replace(/\{\{#taskId\}\}([\s\S]*?)\{\{\/taskId\}\}/g, vars.taskId ? "$1" : "");
+  rendered = rendered.replace(/\{\{#noTask\}\}([\s\S]*?)\{\{\/noTask\}\}/g, vars.taskId ? "" : "$1");
+  rendered = rendered.replace(/\{\{#commentId\}\}([\s\S]*?)\{\{\/commentId\}\}/g, vars.commentId ? "$1" : "");
+  return rendered.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key: string) => vars[key] ?? "");
+}
+
+function contextRecords(ctx: HermesProfileExecutionContext): Array<Record<string, unknown> | undefined> {
+  return [ctx.context as Record<string, unknown> | undefined, ctx.runtime?.sessionParams ?? undefined, ctx.config];
+}
+
+function ctxString(ctx: HermesProfileExecutionContext, ...keys: string[]): string {
+  for (const source of contextRecords(ctx)) {
+    for (const key of keys) {
+      const value = source?.[key];
+      if (typeof value === "string" && value.trim().length > 0) return value.trim();
+    }
+  }
+  return "";
+}
+
+function ctxRecord(ctx: HermesProfileExecutionContext, key: string): Record<string, unknown> | undefined {
+  for (const source of contextRecords(ctx)) {
+    const value = source?.[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  }
+  return undefined;
+}
+
+function recordString(record: Record<string, unknown> | undefined, ...keys: string[]): string {
+  if (!record) return "";
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return "";
 }
 
 function paperclipApiUrl(config: HermesProfileAdapterConfig): string {
@@ -20,10 +55,12 @@ function paperclipApiUrl(config: HermesProfileAdapterConfig): string {
 }
 
 function buildPrompt(ctx: HermesProfileExecutionContext, config: HermesProfileAdapterConfig): string {
-  const taskId = cfgString(ctx.config?.taskId) ?? "";
-  const taskTitle = cfgString(ctx.config?.taskTitle) ?? "";
-  const taskBody = cfgString(ctx.config?.taskBody) ?? "";
-  const commentId = cfgString(ctx.config?.commentId) ?? "";
+  const task = ctxRecord(ctx, "task") ?? ctxRecord(ctx, "issue");
+  const comment = ctxRecord(ctx, "comment") ?? ctxRecord(ctx, "wakeComment");
+  const taskId = ctxString(ctx, "taskId", "issueId") || recordString(task, "id", "taskId", "issueId");
+  const taskTitle = ctxString(ctx, "taskTitle", "issueTitle", "title") || recordString(task, "title", "taskTitle", "issueTitle");
+  const taskBody = ctxString(ctx, "taskBody", "issueBody", "body", "description") || recordString(task, "body", "description", "taskBody", "issueBody");
+  const commentId = ctxString(ctx, "wakeCommentId", "commentId") || recordString(comment, "id", "wakeCommentId", "commentId");
   const agentName = ctx.agent?.name ?? config.profile;
   const template = config.promptTemplate ?? `You are {{agentName}}, a Hermes profile agent running under profile {{profile}} for Paperclip.
 
@@ -76,7 +113,7 @@ function runProfileWrapper(ctx: HermesProfileExecutionContext, command: string, 
     const finish = (exitCode: number | null, signal: NodeJS.Signals | null) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeoutTimer);
+      if (timeoutTimer) clearTimeout(timeoutTimer);
       resolve({ exitCode, signal, timedOut, stdout, stderr });
     };
 
@@ -85,12 +122,12 @@ function runProfileWrapper(ctx: HermesProfileExecutionContext, command: string, 
       try { process.kill(-child.pid, signal); } catch { try { child.kill(signal); } catch { /* noop */ } }
     };
 
-    const timeoutTimer = setTimeout(() => {
+    const timeoutTimer = opts.timeoutSec > 0 ? setTimeout(() => {
       timedOut = true;
       killTree("SIGTERM");
       setTimeout(() => killTree("SIGKILL"), opts.graceSec * 1000).unref();
-    }, opts.timeoutSec * 1000);
-    timeoutTimer.unref();
+    }, opts.timeoutSec * 1000) : null;
+    timeoutTimer?.unref();
 
     child.stdout?.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8");
@@ -131,7 +168,7 @@ export async function executeHermesProfile(ctx: HermesProfileExecutionContext): 
   await ctx.onLog("stdout", `[hermes_profile] Starting profile ${config.profile} via ${wrapper}
 `);
 
-  const result = await runProfileWrapper(ctx, wrapper, args, { cwd, env: buildHermesProfileEnv(config, ctx), timeoutSec: config.timeoutSec ?? 300, graceSec: config.graceSec ?? 10 });
+  const result = await runProfileWrapper(ctx, wrapper, args, { cwd, env: buildHermesProfileEnv(config, ctx), timeoutSec: config.timeoutSec ?? 0, graceSec: config.graceSec ?? 10 });
   const sessionId = result.stdout.match(SESSION_ID_REGEX)?.[1] ?? null;
   const response = cleanResponse(result.stdout);
   const errorMessage = result.exitCode === 0 ? null : (result.stderr.trim() || `Hermes profile exited with ${result.exitCode}`);
