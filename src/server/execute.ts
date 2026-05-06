@@ -83,6 +83,13 @@ Paperclip identity:
 
 If assigned a task, work it using your tools. Use Authorization: Bearer $PAPERCLIP_API_KEY for Paperclip API calls when PAPERCLIP_API_KEY is present. Use X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID on mutating Paperclip API calls.
 
+Diff-first Paperclip lifecycle:
+- Reuse the canonical task context you were woken for; do not create duplicate sibling issues that split decisions or proposed solutions.
+- Move substantive code/config/docs/automation work to in_progress when you start.
+- Make reversible edits, run the smallest useful verification, and post a review packet with changed files, diff stat, summary, checks run, risks, and rollback notes.
+- Move code/config/governance implementation to in_review, not done, unless Igor/root explicitly authorizes self-approval.
+- If blocked, set blocked with the blocker owner and exact next action.
+
 Task ID: {{taskId}}
 Title: {{taskTitle}}
 Comment ID: {{commentId}}

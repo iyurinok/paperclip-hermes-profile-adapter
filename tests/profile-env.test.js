@@ -85,5 +85,7 @@ test('buildPrompt uses nested paperclipWake task, title, and comment data', () =
   assert.match(prompt, /Task ID: BLO-222/);
   assert.match(prompt, /Title: wake title/);
   assert.match(prompt, /Comment ID: comment-222/);
+  assert.match(prompt, /Diff-first Paperclip lifecycle:/);
+  assert.match(prompt, /Move code\/config\/governance implementation to in_review, not done/);
   assert.match(prompt, /wake body/);
 });
