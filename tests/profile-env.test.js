@@ -127,5 +127,6 @@ test('buildPrompt uses nested paperclipWake task, title, and comment data', () =
   assert.match(prompt, /target\.key: diff_first_review/);
   assert.match(prompt, /Approve diff/);
   assert.match(prompt, /Request changes/);
+  assert.match(prompt, /detailsMarkdown with changed files\/diff stat\/summary\/checks\/rollback pointer/);
   assert.match(prompt, /wake body/);
 });
