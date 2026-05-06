@@ -100,6 +100,7 @@ export interface AdapterSkillEntry {
   desired: boolean;
   managed: boolean;
   required?: boolean;
+  requiredReason?: string | null;
   state: "available" | "configured" | "installed" | "missing" | "stale" | "external";
   origin?: "company_managed" | "paperclip_required" | "user_installed" | "external_unknown";
   originLabel?: string | null;
