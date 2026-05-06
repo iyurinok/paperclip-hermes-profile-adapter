@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildHermesProfileEnv } from '../dist/server/profile-env.js';
+import { buildPrompt } from '../dist/server/execute.js';
 
 const baseCtx = {
   runId: 'run-123',
@@ -45,9 +46,13 @@ test('buildHermesProfileEnv falls back to runtime session params when wake conte
       context: undefined,
       runtime: {
         sessionParams: {
-          issue: { id: 'BLO-999', title: 'runtime task', description: 'runtime body' },
-          comment: { id: 'comment-999' },
-          wake_reason: 'runtime-wake',
+          paperclipWake: {
+            issueId: 'BLO-999',
+            taskTitle: 'runtime task',
+            taskBody: 'runtime body',
+            wakeCommentId: 'comment-999',
+            wakeReason: 'runtime-wake',
+          },
         },
         sessionId: 'session-2',
         taskKey: 'runtime-task-key',
@@ -59,4 +64,26 @@ test('buildHermesProfileEnv falls back to runtime session params when wake conte
   assert.equal(env.PAPERCLIP_TASK_ID, 'BLO-999');
   assert.equal(env.PAPERCLIP_WAKE_COMMENT_ID, 'comment-999');
   assert.equal(env.PAPERCLIP_WAKE_REASON, 'runtime-wake');
+});
+
+test('buildPrompt uses nested paperclipWake task, title, and comment data', () => {
+  const prompt = buildPrompt(
+    {
+      ...baseCtx,
+      context: {
+        paperclipWake: {
+          taskId: 'BLO-222',
+          taskTitle: 'wake title',
+          taskBody: 'wake body',
+          wakeCommentId: 'comment-222',
+        },
+      },
+    },
+    { profile: 'stella' },
+  );
+
+  assert.match(prompt, /Task ID: BLO-222/);
+  assert.match(prompt, /Title: wake title/);
+  assert.match(prompt, /Comment ID: comment-222/);
+  assert.match(prompt, /wake body/);
 });

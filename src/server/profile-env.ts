@@ -18,6 +18,15 @@ function recordFromRecord(record: Record<string, unknown> | null | undefined, ..
   return undefined;
 }
 
+function recordString(record: Record<string, unknown> | null | undefined, ...keys: string[]): string | undefined {
+  if (!record) return undefined;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return undefined;
+}
+
 export function buildHermesProfileEnv(
   config: HermesProfileAdapterConfig,
   ctx?: HermesProfileExecutionContext,
@@ -48,13 +57,26 @@ export function buildHermesProfileEnv(
   if (ctx?.agent?.companyId) env.PAPERCLIP_COMPANY_ID = ctx.agent.companyId;
   if (ctx?.authToken && !env.PAPERCLIP_API_KEY) env.PAPERCLIP_API_KEY = ctx.authToken;
 
-  const taskId = stringFromRecord(runtimeParams, "taskId", "task_id", "issueId", "issue_id") ?? stringFromRecord(contextParams, "taskId", "task_id", "issueId", "issue_id") ?? stringFromRecord(taskContext, "id", "taskId", "issueId") ?? ctx?.runtime?.taskKey ?? (typeof ctx?.config?.taskId === "string" ? ctx.config.taskId : undefined);
+  const taskId =
+    stringFromRecord(runtimeParams, "taskId", "task_id", "issueId", "issue_id") ??
+    stringFromRecord(contextParams, "taskId", "task_id", "issueId", "issue_id") ??
+    stringFromRecord(wakePayload, "taskId", "task_id", "issueId", "issue_id", "id", "identifier") ??
+    stringFromRecord(taskContext, "id", "taskId", "issueId", "identifier") ??
+    ctx?.runtime?.taskKey ??
+    (typeof ctx?.config?.taskId === "string" ? ctx.config.taskId : undefined);
   if (taskId) env.PAPERCLIP_TASK_ID = taskId;
 
-  const wakeReason = stringFromRecord(runtimeParams, "wakeReason", "wake_reason", "reason") ?? stringFromRecord(contextParams, "wakeReason", "wake_reason", "reason");
+  const wakeReason =
+    stringFromRecord(runtimeParams, "wakeReason", "wake_reason", "reason") ??
+    stringFromRecord(contextParams, "wakeReason", "wake_reason", "reason") ??
+    stringFromRecord(wakePayload, "wakeReason", "wake_reason", "reason");
   if (wakeReason) env.PAPERCLIP_WAKE_REASON = wakeReason;
 
-  const wakeCommentId = stringFromRecord(runtimeParams, "wakeCommentId", "wake_comment_id", "commentId", "comment_id") ?? stringFromRecord(contextParams, "wakeCommentId", "wake_comment_id", "commentId", "comment_id") ?? stringFromRecord(wakePayload, "latestCommentId") ?? stringFromRecord(commentContext, "id", "wakeCommentId", "commentId");
+  const wakeCommentId =
+    stringFromRecord(runtimeParams, "wakeCommentId", "wake_comment_id", "commentId", "comment_id") ??
+    stringFromRecord(contextParams, "wakeCommentId", "wake_comment_id", "commentId", "comment_id") ??
+    stringFromRecord(wakePayload, "wakeCommentId", "wake_comment_id", "commentId", "comment_id", "latestCommentId") ??
+    stringFromRecord(commentContext, "id", "wakeCommentId", "commentId");
   if (wakeCommentId) env.PAPERCLIP_WAKE_COMMENT_ID = wakeCommentId;
 
   const linkedIssueIds = runtimeParams?.linkedIssueIds ?? contextParams?.linkedIssueIds;

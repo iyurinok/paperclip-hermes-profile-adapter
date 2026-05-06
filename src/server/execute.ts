@@ -63,15 +63,15 @@ function paperclipApiUrl(config: HermesProfileAdapterConfig): string {
   return raw.endsWith("/api") ? raw : raw.replace(/\/+$/, "") + "/api";
 }
 
-function buildPrompt(ctx: HermesProfileExecutionContext, config: HermesProfileAdapterConfig): string {
+export function buildPrompt(ctx: HermesProfileExecutionContext, config: HermesProfileAdapterConfig): string {
   const wakePayload = ctxRecord(ctx, "paperclipWake");
   const task = ctxRecord(ctx, "task") ?? ctxRecord(ctx, "issue") ?? ctxRecord(ctx, "paperclipIssue") ?? recordFrom(wakePayload, "issue", "task");
   const comment = ctxRecord(ctx, "comment") ?? ctxRecord(ctx, "wakeComment") ?? ctxRecord(ctx, "paperclipWakeComment") ?? recordFrom(wakePayload, "latestComment", "comment", "wakeComment");
-  const taskId = ctxString(ctx, "taskId", "issueId") || recordString(task, "id", "taskId", "issueId", "identifier");
-  const taskTitle = ctxString(ctx, "taskTitle", "issueTitle", "title") || recordString(task, "title", "taskTitle", "issueTitle");
-  const taskBody = ctxString(ctx, "taskBody", "issueBody", "body", "description") || recordString(task, "body", "description", "taskBody", "issueBody");
-  const commentId = ctxString(ctx, "wakeCommentId", "commentId") || recordString(wakePayload, "latestCommentId") || recordString(comment, "id", "wakeCommentId", "commentId");
-  const taskMarkdown = ctxString(ctx, "paperclipTaskMarkdown");
+  const taskId = ctxString(ctx, "taskId", "issueId") || recordString(task, "id", "taskId", "issueId", "identifier") || recordString(wakePayload, "taskId", "issueId", "id", "identifier");
+  const taskTitle = ctxString(ctx, "taskTitle", "issueTitle", "title") || recordString(task, "title", "taskTitle", "issueTitle") || recordString(wakePayload, "taskTitle", "issueTitle", "title");
+  const taskBody = ctxString(ctx, "taskBody", "issueBody", "body", "description") || recordString(task, "body", "description", "taskBody", "issueBody") || recordString(wakePayload, "taskBody", "issueBody", "body", "description");
+  const commentId = ctxString(ctx, "wakeCommentId", "commentId") || recordString(wakePayload, "latestCommentId", "wakeCommentId", "commentId") || recordString(comment, "id", "wakeCommentId", "commentId");
+  const taskMarkdown = ctxString(ctx, "paperclipTaskMarkdown") || recordString(wakePayload, "paperclipTaskMarkdown");
   const agentName = ctx.agent?.name ?? config.profile;
   const template = config.promptTemplate ?? `You are {{agentName}}, a Hermes profile agent running under profile {{profile}} for Paperclip.
 
