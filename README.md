@@ -51,6 +51,7 @@ After changing the store, restart Paperclip or use its adapter reload route/UI i
 - Uses `timeoutSec: 0` by default to disable the adapter-level kill timer; set a positive value to enforce a per-run process timeout.
 - Runs only `~/.hermes/profiles/<profile>/bin/hermes-profile-wrapper.sh`; adapter config cannot supply an arbitrary command.
 - Passes Paperclip run/agent/company env vars and optional local-agent JWT (`PAPERCLIP_API_KEY`).
+- Defaults `PAPERCLIP_API_URL` and prompt API Base to `http://127.0.0.1:3100/api`; set `adapterConfig.paperclipApiUrl` or `adapterConfig.env.PAPERCLIP_API_URL` only when a non-local Paperclip endpoint is intentionally reachable from the profile process.
 - Persists Hermes session id as `{ profile, sessionId }` when quiet output includes `session_id:`.
 - Lists profile-local skills from `~/.hermes/profiles/<profile>/skills/**/SKILL.md`.
 - `syncSkills` is intentionally read-only/no-op for now: it reflects desired skills in the returned snapshot but does not copy/link/delete files.

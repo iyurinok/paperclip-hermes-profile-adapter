@@ -18,8 +18,10 @@ function recordFromRecord(record: Record<string, unknown> | null | undefined, ..
   return undefined;
 }
 
+const DEFAULT_PAPERCLIP_API_URL = "http://127.0.0.1:3100/api";
+
 function normalizePaperclipApiUrl(raw: string | undefined): string {
-  const value = raw?.trim() || "http://127.0.0.1:3100/api";
+  const value = raw?.trim() || DEFAULT_PAPERCLIP_API_URL;
   return value.endsWith("/api") ? value : value.replace(/\/+$/, "") + "/api";
 }
 
@@ -84,7 +86,7 @@ export function buildHermesProfileEnv(
     if (joined) env.PAPERCLIP_LINKED_ISSUE_IDS = joined;
   }
 
-  env.PAPERCLIP_API_URL = normalizePaperclipApiUrl(config.paperclipApiUrl ?? env.PAPERCLIP_API_URL);
+  env.PAPERCLIP_API_URL = normalizePaperclipApiUrl(config.paperclipApiUrl);
 
   if (config.env) {
     Object.assign(env, config.env);

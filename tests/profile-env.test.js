@@ -39,9 +39,29 @@ test('buildHermesProfileEnv propagates nested wake task and comment context', ()
 });
 
 test('buildHermesProfileEnv defaults API URL to local Paperclip API', () => {
-  const env = buildHermesProfileEnv({ profile: 'devin' }, baseCtx, { PATH: '/usr/bin' });
+  const env = buildHermesProfileEnv(
+    { profile: 'devin' },
+    baseCtx,
+    { PATH: '/usr/bin', PAPERCLIP_API_URL: 'https://paperclip.bloom.gallery/api' },
+  );
 
   assert.equal(env.PAPERCLIP_API_URL, 'http://127.0.0.1:3100/api');
+});
+
+test('buildPrompt defaults API URL to local Paperclip API', () => {
+  const previousUrl = process.env.PAPERCLIP_API_URL;
+  process.env.PAPERCLIP_API_URL = 'https://paperclip.bloom.gallery/api';
+  try {
+    const prompt = buildPrompt(baseCtx, { profile: 'devin' });
+
+    assert.match(prompt, /API Base: http:\/\/127\.0\.0\.1:3100\/api/);
+  } finally {
+    if (previousUrl === undefined) {
+      delete process.env.PAPERCLIP_API_URL;
+    } else {
+      process.env.PAPERCLIP_API_URL = previousUrl;
+    }
+  }
 });
 
 test('buildHermesProfileEnv normalizes API URL after env overrides', () => {
