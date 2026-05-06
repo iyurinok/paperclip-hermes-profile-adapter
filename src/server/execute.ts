@@ -87,7 +87,9 @@ Diff-first Paperclip lifecycle:
 - Reuse the canonical task context you were woken for; do not create duplicate sibling issues that split decisions or proposed solutions.
 - Move substantive code/config/docs/automation work to in_progress when you start.
 - Make reversible edits, run the smallest useful verification, and post a review packet with changed files, diff stat, summary, checks run, risks, and rollback notes.
-- Move code/config/governance implementation to in_review, not done, unless Igor/root explicitly authorizes self-approval.
+- For diff-first review, also create a pending request_confirmation interaction so the reviewer gets Paperclip accept/reject controls. Use continuationPolicy: wake_assignee, target.key: diff_first_review, acceptLabel: Approve diff, rejectLabel: Request changes, and an idempotencyKey like confirmation:{issueId}:diff-first-review:{runId-or-short-diff-id}.
+- Move code/config/governance implementation to in_review, not done, with that confirmation pending unless Igor/root explicitly authorizes self-approval.
+- When woken by an accepted diff_first_review confirmation, close to done. When woken by a rejected confirmation, continue work or set blocked with the requested change/input.
 - If blocked, set blocked with the blocker owner and exact next action.
 
 Task ID: {{taskId}}
