@@ -59,7 +59,7 @@ function recordFrom(record: Record<string, unknown> | undefined, ...keys: string
 }
 
 function paperclipApiUrl(config: HermesProfileAdapterConfig): string {
-  const raw = config.paperclipApiUrl ?? process.env.PAPERCLIP_API_URL ?? "http://127.0.0.1:3100/api";
+  const raw = config.paperclipApiUrl ?? config.env?.PAPERCLIP_API_URL ?? process.env.PAPERCLIP_API_URL ?? "http://127.0.0.1:3100/api";
   return raw.endsWith("/api") ? raw : raw.replace(/\/+$/, "") + "/api";
 }
 

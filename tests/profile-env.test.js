@@ -38,6 +38,22 @@ test('buildHermesProfileEnv propagates nested wake task and comment context', ()
   assert.equal(env.PAPERCLIP_API_URL, 'https://paperclip.example/api');
 });
 
+test('buildHermesProfileEnv defaults API URL to local Paperclip API', () => {
+  const env = buildHermesProfileEnv({ profile: 'devin' }, baseCtx, { PATH: '/usr/bin' });
+
+  assert.equal(env.PAPERCLIP_API_URL, 'http://127.0.0.1:3100/api');
+});
+
+test('buildHermesProfileEnv normalizes API URL after env overrides', () => {
+  const env = buildHermesProfileEnv(
+    { profile: 'devin', env: { PAPERCLIP_API_URL: 'http://127.0.0.1:3100/' } },
+    baseCtx,
+    { PATH: '/usr/bin', PAPERCLIP_API_URL: 'https://paperclip.bloom.gallery/api' },
+  );
+
+  assert.equal(env.PAPERCLIP_API_URL, 'http://127.0.0.1:3100/api');
+});
+
 test('buildHermesProfileEnv falls back to runtime session params when wake context is absent', () => {
   const env = buildHermesProfileEnv(
     { profile: 'cleo' },

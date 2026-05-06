@@ -18,13 +18,9 @@ function recordFromRecord(record: Record<string, unknown> | null | undefined, ..
   return undefined;
 }
 
-function recordString(record: Record<string, unknown> | null | undefined, ...keys: string[]): string | undefined {
-  if (!record) return undefined;
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string" && value.trim().length > 0) return value.trim();
-  }
-  return undefined;
+function normalizePaperclipApiUrl(raw: string | undefined): string {
+  const value = raw?.trim() || "http://127.0.0.1:3100/api";
+  return value.endsWith("/api") ? value : value.replace(/\/+$/, "") + "/api";
 }
 
 export function buildHermesProfileEnv(
@@ -88,10 +84,11 @@ export function buildHermesProfileEnv(
     if (joined) env.PAPERCLIP_LINKED_ISSUE_IDS = joined;
   }
 
-  if (config.paperclipApiUrl) env.PAPERCLIP_API_URL = config.paperclipApiUrl;
+  env.PAPERCLIP_API_URL = normalizePaperclipApiUrl(config.paperclipApiUrl ?? env.PAPERCLIP_API_URL);
 
   if (config.env) {
     Object.assign(env, config.env);
+    env.PAPERCLIP_API_URL = normalizePaperclipApiUrl(config.paperclipApiUrl ?? env.PAPERCLIP_API_URL);
   }
 
   return env;
