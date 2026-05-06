@@ -38,8 +38,8 @@ test('skill listing returns supported snapshot', async () => {
   assert.ok(Array.isArray(snapshot.entries));
 });
 
-test('syncSkills is read-only and preserves desired skills', async () => {
+test('syncSkills preserves desired skills without surfacing read-only warnings', async () => {
   const snapshot = await syncHermesProfileSkills({ agentId: 'a', companyId: 'c', adapterType: 'hermes_profile', config: { profile: 'stella' } }, ['hermes-profile/devops/paperclip-mcp']);
   assert.deepEqual(snapshot.desiredSkills, ['hermes-profile/devops/paperclip-mcp']);
-  assert.match(snapshot.warnings.join('\n'), /read-only/i);
+  assert.deepEqual(snapshot.warnings, []);
 });

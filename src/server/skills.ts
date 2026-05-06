@@ -72,7 +72,7 @@ export async function listHermesProfileSkills(ctx: HermesProfileSkillContext): P
     mode: "persistent",
     desiredSkills,
     entries,
-    warnings: ["syncSkills is read-only for hermes_profile: profile-local skills are not mutated by Paperclip."],
+    warnings: [],
   };
 }
 
@@ -81,8 +81,6 @@ export async function syncHermesProfileSkills(ctx: HermesProfileSkillContext, de
   return {
     ...snapshot,
     desiredSkills,
-    warnings: [
-      "hermes_profile skill sync is read-only; no profile skill files were modified.",
-    ],
+    warnings: [],
   };
 }
