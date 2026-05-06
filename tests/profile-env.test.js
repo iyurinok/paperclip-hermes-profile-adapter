@@ -128,8 +128,10 @@ test('buildPrompt uses nested paperclipWake task, title, and comment data', () =
   assert.match(prompt, /target\.label: Diff review/);
   assert.match(prompt, /sourceCommentId/);
   assert.match(prompt, /supersedeOnUserComment: true/);
+  assert.match(prompt, /confirmation card must be self-contained for mobile review/);
   assert.match(prompt, /payload\.detailsMarkdown/);
-  assert.match(prompt, /understandable on mobile/);
+  assert.match(prompt, /compact review context: changed files, diff stat, summary, checks, risks, rollback/);
+  assert.match(prompt, /reviewer knows what they are approving/);
   assert.match(prompt, /Approve diff/);
   assert.match(prompt, /Request changes/);
   assert.match(prompt, /wake body/);
