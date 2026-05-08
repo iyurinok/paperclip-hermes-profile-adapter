@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildHermesProfileEnv } from '../dist/server/profile-env.js';
-import { buildPrompt } from '../dist/server/execute.js';
+import { createServer } from 'node:http';
+import { buildPrompt, isSilentTaskScopedSuccess, verifyTaskMutation } from '../dist/server/execute.js';
 
 const baseCtx = {
   runId: 'run-123',
@@ -121,6 +122,13 @@ test('buildPrompt uses nested paperclipWake task, title, and comment data', () =
   assert.match(prompt, /Task ID: BLO-222/);
   assert.match(prompt, /Title: wake title/);
   assert.match(prompt, /Comment ID: comment-222/);
+  assert.match(prompt, /Paperclip API rules:/);
+  assert.match(prompt, /PAPERCLIP_API_URL already includes \/api/);
+  assert.match(prompt, /Comment bodies use JSON key body, not bodyMarkdown/);
+  assert.match(prompt, /prefer \$PAPERCLIP_TASK_ID/);
+  assert.match(prompt, /only claim success after the persisted state matches what you claim/);
+  assert.match(prompt, /Safe task update examples:/);
+  assert.match(prompt, /issues\/\$PAPERCLIP_TASK_ID\/comments/);
   assert.match(prompt, /Diff-first Paperclip lifecycle:/);
   assert.match(prompt, /Move code\/config\/governance implementation to in_review, not done/);
   assert.match(prompt, /request_confirmation interaction/);
@@ -135,4 +143,174 @@ test('buildPrompt uses nested paperclipWake task, title, and comment data', () =
   assert.match(prompt, /Approve diff/);
   assert.match(prompt, /Request changes/);
   assert.match(prompt, /wake body/);
+});
+
+test('isSilentTaskScopedSuccess fails empty and silent task-scoped successes', () => {
+  assert.equal(isSilentTaskScopedSuccess({ exitCode: 0, timedOut: false, response: '', taskId: 'BLO-1' }), true);
+  assert.equal(isSilentTaskScopedSuccess({ exitCode: 0, timedOut: false, response: '[SILENT]', taskId: 'BLO-1' }), true);
+});
+
+test('isSilentTaskScopedSuccess allows non-task and explicit task responses', () => {
+  assert.equal(isSilentTaskScopedSuccess({ exitCode: 0, timedOut: false, response: '[SILENT]', taskId: '' }), false);
+  assert.equal(isSilentTaskScopedSuccess({ exitCode: 0, timedOut: false, response: 'SMOKE_PASS BLO-1', taskId: 'BLO-1' }), false);
+  assert.equal(isSilentTaskScopedSuccess({ exitCode: 1, timedOut: false, response: '[SILENT]', taskId: 'BLO-1' }), false);
+  assert.equal(isSilentTaskScopedSuccess({ exitCode: 0, timedOut: true, response: '[SILENT]', taskId: 'BLO-1' }), false);
+});
+
+
+function withPaperclipTestServer(handler) {
+  return new Promise((resolve, reject) => {
+    const server = createServer(handler);
+    server.listen(0, '127.0.0.1', () => resolve(server));
+    server.on('error', reject);
+  });
+}
+
+test('verifyTaskMutation passes when run-linked comment exists', async () => {
+  const server = await withPaperclipTestServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/api/issues/BLO-1') {
+      res.end(JSON.stringify({ status: 'done' }));
+      return;
+    }
+    if (req.url === '/api/issues/BLO-1/comments') {
+      res.end(JSON.stringify([{ body: 'SMOKE_PASS', createdByRunId: 'run-123' }]));
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: 'not found' }));
+  });
+  try {
+    const { port } = server.address();
+    const result = await verifyTaskMutation(baseCtx, {
+      PAPERCLIP_TASK_ID: 'BLO-1',
+      PAPERCLIP_RUN_ID: 'run-123',
+      PAPERCLIP_API_URL: `http://127.0.0.1:${port}/api`,
+    });
+    assert.deepEqual(result, { ok: true, status: 'done', comments: 1 });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('verifyTaskMutation fails without persisted task evidence', async () => {
+  const server = await withPaperclipTestServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/api/issues/BLO-1') {
+      res.end(JSON.stringify({ status: 'in_progress' }));
+      return;
+    }
+    if (req.url === '/api/issues/BLO-1/comments') {
+      res.end(JSON.stringify([]));
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: 'not found' }));
+  });
+  try {
+    const { port } = server.address();
+    const result = await verifyTaskMutation(baseCtx, {
+      PAPERCLIP_TASK_ID: 'BLO-1',
+      PAPERCLIP_RUN_ID: 'run-123',
+      PAPERCLIP_API_URL: `http://127.0.0.1:${port}/api`,
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /No persisted task mutation evidence/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+
+test('verifyTaskMutation fails when response claims done but status is not done', async () => {
+  const server = await withPaperclipTestServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/api/issues/BLO-1') {
+      res.end(JSON.stringify({ status: 'in_progress' }));
+      return;
+    }
+    if (req.url === '/api/issues/BLO-1/comments') {
+      res.end(JSON.stringify([{ body: 'SMOKE_PASS', createdByRunId: 'run-123' }]));
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: 'not found' }));
+  });
+  try {
+    const { port } = server.address();
+    const result = await verifyTaskMutation(baseCtx, {
+      PAPERCLIP_TASK_ID: 'BLO-1',
+      PAPERCLIP_RUN_ID: 'run-123',
+      PAPERCLIP_API_URL: `http://127.0.0.1:${port}/api`,
+    }, 'added SMOKE_PASS and set status to `done`');
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /missing token\/run id/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+
+test('verifyTaskMutation finalizes done when response claims done and run auth is present', async () => {
+  const requests = [];
+  const server = await withPaperclipTestServer((req, res) => {
+    requests.push({ method: req.method, url: req.url, runId: req.headers['x-paperclip-run-id'] });
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/api/issues/BLO-1' && req.method === 'GET') {
+      res.end(JSON.stringify({ status: 'in_progress' }));
+      return;
+    }
+    if (req.url === '/api/issues/BLO-1' && req.method === 'PATCH') {
+      res.end(JSON.stringify({ status: 'done' }));
+      return;
+    }
+    if (req.url === '/api/issues/BLO-1/comments') {
+      res.end(JSON.stringify([{ body: 'SMOKE_PASS', createdByRunId: 'run-123' }]));
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: 'not found' }));
+  });
+  try {
+    const { port } = server.address();
+    const result = await verifyTaskMutation(baseCtx, {
+      PAPERCLIP_TASK_ID: 'BLO-1',
+      PAPERCLIP_RUN_ID: 'run-123',
+      PAPERCLIP_API_URL: `http://127.0.0.1:${port}/api`,
+      PAPERCLIP_API_KEY: 'token-123',
+    }, 'added SMOKE_PASS and set status to done');
+    assert.deepEqual(result, { ok: true, status: 'done', comments: 1, finalized: true });
+    assert.equal(requests.some((request) => request.method === 'PATCH' && request.runId === 'run-123'), true);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+
+test('verifyTaskMutation fails when profile reports authorization failure', async () => {
+  const server = await withPaperclipTestServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/api/issues/BLO-1') {
+      res.end(JSON.stringify({ status: 'in_progress' }));
+      return;
+    }
+    if (req.url === '/api/issues/BLO-1/comments') {
+      res.end(JSON.stringify([{ body: 'old', createdByRunId: 'old-run' }]));
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: 'not found' }));
+  });
+  try {
+    const { port } = server.address();
+    const result = await verifyTaskMutation(baseCtx, {
+      PAPERCLIP_TASK_ID: 'BLO-1',
+      PAPERCLIP_RUN_ID: 'run-123',
+      PAPERCLIP_API_URL: `http://127.0.0.1:${port}/api`,
+    }, 'Paperclip API returned `Unauthorized` for both reads');
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /authorization failure/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
