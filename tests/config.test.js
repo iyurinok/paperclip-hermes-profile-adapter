@@ -43,3 +43,31 @@ test('syncSkills preserves desired skills without surfacing read-only warnings',
   assert.deepEqual(snapshot.desiredSkills, ['hermes-profile/devops/paperclip-mcp']);
   assert.deepEqual(snapshot.warnings, []);
 });
+
+test('skill sync canonicalizes runtime-name desires and reports missing runtime sources', async () => {
+  const snapshot = await syncHermesProfileSkills({
+    agentId: 'a',
+    companyId: 'c',
+    adapterType: 'hermes_profile',
+    config: {
+      profile: 'stella',
+      paperclipRuntimeSkills: [
+        {
+          key: 'paperclipai/paperclip/paperclip',
+          runtimeName: 'paperclip',
+          source: '/tmp/missing-paperclip-skill',
+          sourceStatus: 'missing',
+          missingDetail: 'runtime source is absent',
+          required: true,
+        },
+      ],
+    },
+  }, ['paperclip']);
+
+  assert.deepEqual(snapshot.desiredSkills, ['paperclipai/paperclip/paperclip']);
+  const entry = snapshot.entries.find((candidate) => candidate.key === 'paperclipai/paperclip/paperclip');
+  assert.equal(entry?.state, 'missing');
+  assert.equal(entry?.sourcePath, null);
+  assert.equal(entry?.detail, 'runtime source is absent');
+  assert.match(snapshot.warnings[0], /runtime source is missing/);
+});

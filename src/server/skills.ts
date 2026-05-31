@@ -18,6 +18,8 @@ interface RuntimeSkillEntry {
   key: string;
   runtimeName: string;
   source: string;
+  sourceStatus: "available" | "missing";
+  missingDetail?: string | null;
   required?: boolean;
   requiredReason?: string | null;
 }
@@ -38,9 +40,27 @@ function asRuntimeSkillEntry(value: unknown): RuntimeSkillEntry | null {
     key,
     runtimeName,
     source,
+    sourceStatus: entry.sourceStatus === "missing" ? "missing" : "available",
+    missingDetail: typeof entry.missingDetail === "string" && entry.missingDetail.trim() ? entry.missingDetail.trim() : null,
     required: entry.required === true,
     requiredReason: typeof entry.requiredReason === "string" && entry.requiredReason.trim() ? entry.requiredReason.trim() : null,
   };
+}
+
+function canonicalizeDesiredSkillReference(reference: string, available: RuntimeSkillEntry[]): string {
+  const normalized = reference.trim().toLowerCase();
+  if (!normalized) return "";
+
+  const exactKey = available.find((entry) => entry.key.trim().toLowerCase() === normalized);
+  if (exactKey) return exactKey.key;
+
+  const runtimeMatches = available.filter((entry) => entry.runtimeName.trim().toLowerCase() === normalized);
+  if (runtimeMatches.length === 1) return runtimeMatches[0]!.key;
+
+  const slugMatches = available.filter((entry) => entry.key.trim().toLowerCase().split("/").pop() === normalized);
+  if (slugMatches.length === 1) return slugMatches[0]!.key;
+
+  return normalized;
 }
 
 function runtimeSkillEntries(config: Record<string, unknown>): RuntimeSkillEntry[] {
@@ -62,9 +82,16 @@ function configuredDesired(config: Record<string, unknown>, available: RuntimeSk
         ? config.skills
         : null;
   if (desired?.every((item) => typeof item === "string")) {
-    return Array.from(new Set([...available.filter((entry) => entry.required).map((entry) => entry.key), ...desired.map((item) => item.trim()).filter(Boolean)]));
+    return Array.from(new Set([
+      ...available.filter((entry) => entry.required).map((entry) => entry.key),
+      ...desired.map((item) => canonicalizeDesiredSkillReference(item.trim(), available)).filter(Boolean),
+    ]));
   }
   return Array.from(new Set(available.filter((entry) => entry.required).map((entry) => entry.key)));
+}
+
+function isRuntimeSkillSourceMissing(entry: RuntimeSkillEntry): boolean {
+  return entry.sourceStatus === "missing";
 }
 
 async function walkSkillFiles(root: string): Promise<string[]> {
@@ -163,6 +190,25 @@ function buildSnapshot(input: {
   for (const available of input.available) {
     const installed = input.installed.get(available.runtimeName) ?? null;
     const desired = desiredSet.has(available.key);
+    if (isRuntimeSkillSourceMissing(available)) {
+      entries.push({
+        key: available.key,
+        runtimeName: available.runtimeName,
+        desired,
+        managed: true,
+        required: Boolean(available.required),
+        requiredReason: available.requiredReason ?? null,
+        state: "missing",
+        origin: available.required ? "paperclip_required" : "company_managed",
+        originLabel: available.required ? "Required by Paperclip" : "Managed by Paperclip",
+        locationLabel: `Hermes profile ${input.profile}`,
+        readOnly: false,
+        sourcePath: null,
+        targetPath: path.join(input.skillsRoot, available.runtimeName),
+        detail: available.missingDetail ?? "Paperclip cannot find this skill in the local runtime skills directory.",
+      });
+      continue;
+    }
     let state: AdapterSkillEntry["state"] = desired ? "missing" : "available";
     let managed = false;
     let detail: string | null = desired ? "Will be linked into this Hermes profile's skills directory." : null;
@@ -275,6 +321,10 @@ export async function syncHermesProfileSkills(ctx: HermesProfileSkillContext, de
   await fs.mkdir(skillsRoot, { recursive: true });
   for (const entry of available) {
     if (!desiredSet.has(entry.key)) continue;
+    if (isRuntimeSkillSourceMissing(entry)) {
+      warnings.push(`Skill "${entry.key}" was not linked because its Paperclip runtime source is missing.`);
+      continue;
+    }
     const target = path.join(skillsRoot, entry.runtimeName);
     const result = await ensureSymlink(entry.source, target);
     if (result === "skipped") {
